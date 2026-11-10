@@ -1,0 +1,5 @@
+.env
+.env.*
+!.env.example
+backend/target/
+.m2-local/
