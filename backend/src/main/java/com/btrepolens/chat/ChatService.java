@@ -24,11 +24,21 @@ public class ChatService {
     private final ObjectProvider<ChatModel> model;
     private final GitHubClient github;
     private final ProposalService proposals;
-    public ChatService(JdbcTemplate db, ObjectProvider<ChatModel> model, GitHubClient github, ProposalService proposals) {this.db=db;this.model=model;this.github=github;this.proposals=proposals;}
+    private final ChatTurnLock turnLock;
+    public ChatService(JdbcTemplate db, ObjectProvider<ChatModel> model, GitHubClient github, ProposalService proposals, ChatTurnLock turnLock) {this.db=db;this.model=model;this.github=github;this.proposals=proposals;this.turnLock=turnLock;}
 
+    // The advisory lock keys mirror ChatTurnLock so API busy state reflects live turns.
+    private static final String SESSION_QUERY = """
+        SELECT s.id, s.repository_id, s.title, s.created_at,
+          EXISTS (SELECT 1 FROM pg_locks l WHERE l.locktype='advisory' AND l.granted
+            AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database())
+            AND l.objsubid=2 AND l.classid::bigint=(((s.id >> 32) # 1112822348) & 4294967295)
+            AND l.objid::bigint=(s.id & 4294967295)) AS busy
+        FROM chat_session s
+        """;
     private static Session session(java.sql.ResultSet r,int n) throws java.sql.SQLException {return new Session(r.getLong("id"),r.getLong("repository_id"),r.getString("title"),r.getTimestamp("created_at").toInstant(),r.getBoolean("busy"));}
-    public Session get(long id){return db.query("SELECT * FROM chat_session WHERE id=?",ChatService::session,id).stream().findFirst().orElseThrow(()->new AppException(HttpStatus.NOT_FOUND,"SESSION_NOT_FOUND","Chat session not found"));}
-    public List<Session> list(){return db.query("SELECT * FROM chat_session ORDER BY id DESC LIMIT 100",ChatService::session);}
+    public Session get(long id){return db.query(SESSION_QUERY + " WHERE s.id=?",ChatService::session,id).stream().findFirst().orElseThrow(()->new AppException(HttpStatus.NOT_FOUND,"SESSION_NOT_FOUND","Chat session not found"));}
+    public List<Session> list(){return db.query(SESSION_QUERY + " ORDER BY s.id DESC LIMIT 100",ChatService::session);}
     public Session create(long repositoryId, String title){
         requireActive(repositoryId);
         Long id=db.queryForObject("INSERT INTO chat_session(repository_id,title) VALUES (?,?) RETURNING id",Long.class,repositoryId,title.trim());
@@ -46,9 +56,9 @@ public class ChatService {
         requireActive(session.repositoryId());
         ChatModel chatModel=model.getIfAvailable();
         if(chatModel==null) throw new AppException(HttpStatus.SERVICE_UNAVAILABLE,"AI_NOT_CONFIGURED","AI is not configured. Set AI_CHAT_MODEL=openai and AI_API_KEY.");
-        int locked=db.update("UPDATE chat_session SET busy=TRUE WHERE id=? AND busy=FALSE",id);
-        if(locked==0) throw new AppException(HttpStatus.CONFLICT,"SESSION_BUSY","A response is already in progress for this session");
-        try {
+        try (var lock=turnLock.acquire(id)) {
+          try {
+            requireActive(session.repositoryId());
             db.update("INSERT INTO chat_message(session_id,role,content) VALUES (?,'USER',?)",id,text);
             var history=db.query("SELECT * FROM chat_message WHERE session_id=? ORDER BY id DESC LIMIT 20",(r,n)->new ChatMessage(r.getLong("id"),r.getString("role"),r.getString("content"),r.getTimestamp("created_at").toInstant()),id);
             Collections.reverse(history);
@@ -71,8 +81,9 @@ public class ChatService {
             if(answer==null || answer.isBlank()) throw new IllegalStateException("empty model response");
             Long messageId=db.queryForObject("INSERT INTO chat_message(session_id,role,content) VALUES (?,'ASSISTANT',?) RETURNING id",Long.class,id,answer);
             return db.queryForObject("SELECT * FROM chat_message WHERE id=?",(r,n)->new ChatMessage(r.getLong("id"),r.getString("role"),r.getString("content"),r.getTimestamp("created_at").toInstant()),messageId);
+          } finally { lock.rollback(); }
         } catch (AppException e) { throw e; }
+        catch (java.sql.SQLException e) { throw new AppException(HttpStatus.SERVICE_UNAVAILABLE,"SESSION_LOCK_FAILED","Could not lock the conversation. Try again."); }
         catch (RuntimeException e) { throw new AppException(HttpStatus.BAD_GATEWAY,"AI_REQUEST_FAILED","The AI request failed. Check provider configuration and try again."); }
-        finally { db.update("UPDATE chat_session SET busy=FALSE WHERE id=?",id); }
     }
 }
