@@ -2,7 +2,7 @@
 
 Developers need a unified view of unfinished GitHub work and, eventually, grounded assistance with priorities and planning. BTRepoLens AI aims to provide that context through a natural-language assistant. The sole MVP actor is a developer using a trusted local installation.
 
-The complete MVP includes registering repositories, retrieving metadata, issues and pull requests, analyzing tasks, proposing plans and issues, explicit approval before writes, conversation history and tool execution logs. Phase 1 implements registration, activation, live read-only repository information, issue and pull request retrieval, health and local persistence. AI, chat, approval and GitHub writes are not implemented.
+The MVP includes registering repositories, retrieving metadata, issues and pull requests, analyzing tasks, proposing plans and issues, explicit approval before writes, conversation history and tool execution logs. The assistant uses Spring AI tools constrained to the active repository. Issue proposals require explicit approval before creation.
 
 Functional rules: multiple accessible repositories may be registered, at most one is active, registration verifies GitHub access and duplicate names are rejected. Reads are scoped to the explicitly requested registered repository. GitHub remains authoritative for remote data; the database stores only local selections. No fabricated GitHub data is returned.
 
