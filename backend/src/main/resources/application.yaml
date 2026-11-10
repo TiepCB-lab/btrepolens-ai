@@ -11,7 +11,7 @@ spring:
     open-in-view: false
   ai:
     model:
-      chat: none
+      chat: ${AI_CHAT_MODEL:none}
       embedding: none
     openai:
       api-key: ${AI_API_KEY:unused}

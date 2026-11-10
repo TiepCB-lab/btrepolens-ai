@@ -76,4 +76,21 @@ public class GitHubClient {
         SearchCount c = get("/search/issues", Map.of("q", "repo:" + owner + "/" + name + " is:open is:" + type, "per_page", 1), COUNT);
         return new Count(c.totalCount(), c.incompleteResults());
     }
+
+    /** Called only by the approval workflow after a durable claim. Never retried here. */
+    public IssueView createApprovedIssue(String owner, String name, String title, String body, List<String> labels) {
+        try {
+            Issue issue = client.post().uri(repo(owner, name) + "/issues")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("title", title, "body", body, "labels", labels))
+                .retrieve()
+                .onStatus(s -> s.is3xxRedirection(), (request, response) -> {
+                    throw new AppException(HttpStatus.BAD_GATEWAY, "GITHUB_REDIRECT", "GitHub redirected the request");
+                }).body(ISSUE);
+            if (issue == null || issue.htmlUrl() == null) throw new AppException(HttpStatus.BAD_GATEWAY, "GITHUB_ERROR", "GitHub returned an invalid response");
+            return IssueView.from(issue);
+        } catch (RestClientException e) {
+            throw new AppException(HttpStatus.BAD_GATEWAY, "GITHUB_WRITE_UNCERTAIN", "GitHub issue creation could not be confirmed");
+        }
+    }
 }
