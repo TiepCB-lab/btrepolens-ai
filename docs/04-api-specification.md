@@ -28,3 +28,19 @@ curl http://localhost:8080/api/v1/repositories/1/issues/1
 curl 'http://localhost:8080/api/v1/repositories/1/pull-requests?state=all&limit=10'
 curl http://localhost:8080/api/v1/repositories/1/pull-requests/1
 ```
+
+## Assistant and approval
+
+| Method | Path | Result |
+|---|---|---|
+| GET | `/api/v1/chat/sessions` | Latest 100 sessions |
+| POST | `/api/v1/chat/sessions` | Create with `{"repositoryId":1,"title":"Planning"}`; repository must be active |
+| GET | `/api/v1/chat/sessions/{id}` | Session metadata |
+| GET/POST | `/api/v1/chat/sessions/{id}/messages` | History / send `{"content":"..."}` |
+| GET | `/api/v1/chat/sessions/{id}/proposals` | Issue proposals for review |
+| GET | `/api/v1/chat/sessions/{id}/tool-logs` | Tool names, timestamps and outcomes |
+| GET | `/api/v1/proposals/{id}` | Proposal and execution state |
+| POST | `/api/v1/proposals/{id}/approve` | Create issue once after explicit `{"confirmation":"APPROVE"}` |
+| POST | `/api/v1/proposals/{id}/reject` | Reject a pending proposal using `{}` |
+
+Only the active repository can be used for new assistant work or approval. AI is optional and returns 503 `AI_NOT_CONFIGURED` when disabled. A proposal must be `PENDING` to approve; concurrent approval is rejected. `UNKNOWN` or a remaining `EXECUTING` state needs manual GitHub reconciliation and cannot be retried. A GitHub timeout does not prove that the issue was not created.
