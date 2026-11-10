@@ -843,6 +843,19 @@ svg {
   color: #344f53;
   margin-bottom: 20px;
 }
+.session-busy {
+  margin-top: 16px;
+  margin-bottom: 0;
+  font-size: 13px;
+}
+.approval-confirm {
+  width: 100%;
+  padding: 12px;
+  background: #f1f6f6;
+  border-radius: 6px;
+  color: #344f53;
+  font-size: 13px;
+}
 .assistant-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
@@ -960,6 +973,10 @@ svg {
   max-height: 300px;
   overflow: auto;
   font-size: 13px;
+}
+.proposal-body:focus-visible {
+  outline: 3px solid #78b7c5;
+  outline-offset: 3px;
 }
 .proposal-actions {
   display: flex;

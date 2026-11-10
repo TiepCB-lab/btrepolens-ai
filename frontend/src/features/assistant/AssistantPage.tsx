@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router";
 import { ArrowUpRight, MessageSquarePlus, Send } from "lucide-react";
-import { request } from "../../shared/api/client";
+import { ApiError, request } from "../../shared/api/client";
 import { ErrorState, Loading } from "../../shared/components/States";
 import { githubUrl } from "../../shared/format";
 import { repositoriesApi } from "../repositories/api";
@@ -38,40 +38,67 @@ export function AssistantPage() {
   const { id = "" } = useParams();
   const client = useQueryClient();
   const [sessionId, setSessionId] = useState<number | null>(null);
-  const [text, setText] = useState("");
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [actionError, setActionError] = useState<Error | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const wasBusy = useRef(false);
   const repositories = useQuery({
     queryKey: ["repositories"],
     queryFn: repositoriesApi.list,
   });
-  const active =
-    repositories.data?.find((repo) => String(repo.id) === id)?.active ?? false;
+  const repository = repositories.data?.find((repo) => String(repo.id) === id);
+  const active = repository?.active ?? false;
   const sessions = useQuery({
     queryKey: ["chat-sessions"],
     queryFn: () => request<Session[]>("/chat/sessions"),
+  });
+  const selectedSession = useQuery({
+    queryKey: ["chat-session", sessionId],
+    queryFn: () => request<Session>(`/chat/sessions/${sessionId}`),
+    enabled: sessionId !== null,
+    refetchInterval: sessionId !== null ? 5000 : false,
   });
   const messages = useQuery({
     queryKey: ["chat-messages", sessionId],
     queryFn: () => request<Message[]>(`/chat/sessions/${sessionId}/messages`),
     enabled: sessionId !== null,
+    refetchInterval: sessionId !== null ? 5000 : false,
   });
   const proposals = useQuery({
     queryKey: ["chat-proposals", sessionId],
     queryFn: () => request<Proposal[]>(`/chat/sessions/${sessionId}/proposals`),
     enabled: sessionId !== null,
+    refetchInterval: sessionId !== null ? 5000 : false,
   });
   const logs = useQuery({
     queryKey: ["chat-logs", sessionId],
     queryFn: () => request<Log[]>(`/chat/sessions/${sessionId}/tool-logs`),
     enabled: sessionId !== null,
+    refetchInterval: sessionId !== null ? 5000 : false,
   });
-  const refreshSession = async () => {
+  const refreshSession = async (targetId: number) => {
     await Promise.all([
-      client.invalidateQueries({ queryKey: ["chat-messages", sessionId] }),
-      client.invalidateQueries({ queryKey: ["chat-proposals", sessionId] }),
-      client.invalidateQueries({ queryKey: ["chat-logs", sessionId] }),
+      client.invalidateQueries({ queryKey: ["chat-messages", targetId] }),
+      client.invalidateQueries({ queryKey: ["chat-proposals", targetId] }),
+      client.invalidateQueries({ queryKey: ["chat-logs", targetId] }),
+      client.invalidateQueries({ queryKey: ["chat-session", targetId] }),
+      client.invalidateQueries({ queryKey: ["chat-sessions"] }),
     ]);
   };
+  useEffect(() => {
+    if (
+      sessionId !== null &&
+      wasBusy.current &&
+      selectedSession.data?.busy === false
+    ) {
+      void Promise.all([
+        client.invalidateQueries({ queryKey: ["chat-messages", sessionId] }),
+        client.invalidateQueries({ queryKey: ["chat-proposals", sessionId] }),
+        client.invalidateQueries({ queryKey: ["chat-logs", sessionId] }),
+      ]);
+    }
+    wasBusy.current = selectedSession.data?.busy ?? false;
+  }, [client, selectedSession.data?.busy, sessionId]);
   const create = useMutation({
     mutationFn: () =>
       request<Session>("/chat/sessions", {
@@ -87,13 +114,25 @@ export function AssistantPage() {
     },
   });
   const send = useMutation({
-    mutationFn: (content: string) =>
-      request<Message>(`/chat/sessions/${sessionId}/messages`, {
+    mutationFn: ({
+      targetId,
+      content,
+    }: {
+      targetId: number;
+      content: string;
+    }) =>
+      request<Message>(`/chat/sessions/${targetId}/messages`, {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content: content.trim() }),
       }),
-    onSuccess: () => setText(""),
-    onSettled: refreshSession,
+    onSuccess: (_message, { targetId, content }) =>
+      setDrafts((previous) => {
+        if (previous[targetId] !== content) return previous;
+        const next = { ...previous };
+        delete next[targetId];
+        return next;
+      }),
+    onSettled: (_data, _error, variables) => refreshSession(variables.targetId),
   });
   const decide = useMutation({
     mutationFn: ({
@@ -102,6 +141,7 @@ export function AssistantPage() {
     }: {
       proposalId: number;
       action: "approve" | "reject";
+      targetId: number;
     }) =>
       request<Proposal>(`/proposals/${proposalId}/${action}`, {
         method: "POST",
@@ -111,24 +151,35 @@ export function AssistantPage() {
       }),
     onMutate: () => setActionError(null),
     onError: (error) => setActionError(error),
-    onSettled: refreshSession,
+    onSettled: (_data, _error, variables) => refreshSession(variables.targetId),
   });
+  const actionResolved = proposals.data?.some(
+    (proposal) =>
+      proposal.id === decide.variables?.proposalId &&
+      ["SUCCEEDED", "REJECTED"].includes(proposal.state),
+  );
   const visibleSessions =
     sessions.data?.filter((session) => String(session.repositoryId) === id) ??
     [];
+  const text = sessionId === null ? "" : (drafts[sessionId] ?? "");
+  const operationPending =
+    create.isPending || send.isPending || decide.isPending;
+  const sessionBusy = selectedSession.data?.busy ?? false;
+  const canSend =
+    active &&
+    sessionId !== null &&
+    selectedSession.isSuccess &&
+    !sessionBusy &&
+    !operationPending;
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (text.trim()) send.mutate(text.trim());
+    if (canSend && sessionId !== null && text.trim())
+      send.mutate({ targetId: sessionId, content: text });
   }
   function decideProposal(proposal: Proposal, action: "approve" | "reject") {
-    if (
-      action === "approve" &&
-      !window.confirm(
-        `Create this GitHub issue in the active repository?\n\n${proposal.title}\n\nReview the full proposal before approving.`,
-      )
-    )
-      return;
-    decide.mutate({ proposalId: proposal.id, action });
+    if (sessionId === null) return;
+    setConfirmId(null);
+    decide.mutate({ proposalId: proposal.id, action, targetId: sessionId });
   }
   return (
     <div className="assistant-page">
@@ -142,7 +193,7 @@ export function AssistantPage() {
         </div>
         <button
           className="button"
-          disabled={!active || create.isPending}
+          disabled={!active || create.isPending || operationPending}
           onClick={() => create.mutate()}
         >
           <MessageSquarePlus size={15} /> New conversation
@@ -167,11 +218,16 @@ export function AssistantPage() {
             Conversation
             <select
               value={sessionId ?? ""}
-              onChange={(event) =>
+              disabled={operationPending}
+              onChange={(event) => {
+                send.reset();
+                setActionError(null);
+                setConfirmId(null);
+                wasBusy.current = false;
                 setSessionId(
                   event.target.value ? Number(event.target.value) : null,
-                )
-              }
+                );
+              }}
             >
               <option value="">Select a conversation</option>
               {visibleSessions.map((session) => (
@@ -195,6 +251,18 @@ export function AssistantPage() {
             </div>
           ) : (
             <>
+              {selectedSession.isError && (
+                <ErrorState
+                  error={selectedSession.error}
+                  retry={() => void selectedSession.refetch()}
+                />
+              )}
+              {sessionBusy && !send.isPending && (
+                <div className="assistant-notice session-busy" role="status">
+                  A response is in progress in another window. This conversation
+                  will update when it finishes.
+                </div>
+              )}
               <div className="messages" aria-live="polite">
                 {messages.isPending ? (
                   <Loading label="Loading conversation" />
@@ -221,21 +289,39 @@ export function AssistantPage() {
                   </p>
                 )}
               </div>
-              {send.error && <ErrorState error={send.error} />}
+              {send.error && (
+                <>
+                  <ErrorState error={send.error} />
+                  {send.error instanceof ApiError &&
+                    (send.error.status === 0 ||
+                      send.error.status >= 500 ||
+                      send.error.code === "INVALID_RESPONSE") && (
+                      <p className="assistant-help">
+                        Your message may already be saved. Check the
+                        conversation before sending it again.
+                      </p>
+                    )}
+                </>
+              )}
               <form className="message-form" onSubmit={submit}>
                 <label htmlFor="chat-message">Your message</label>
                 <textarea
                   id="chat-message"
                   value={text}
-                  onChange={(event) => setText(event.target.value)}
+                  onChange={(event) =>
+                    setDrafts((previous) => ({
+                      ...previous,
+                      [sessionId]: event.target.value,
+                    }))
+                  }
                   placeholder="What should I work on next?"
                   maxLength={10000}
                   required
-                  disabled={!active || send.isPending}
+                  disabled={!canSend}
                 />
                 <button
                   className="button primary"
-                  disabled={!active || send.isPending || !text.trim()}
+                  disabled={!canSend || !text.trim()}
                 >
                   <Send size={15} />{" "}
                   {send.isPending ? "Thinking…" : "Send message"}
@@ -250,7 +336,9 @@ export function AssistantPage() {
             <p className="assistant-help">
               Review the full proposal before approving a GitHub write.
             </p>
-            {actionError && <ErrorState error={actionError} />}
+            {actionError && !actionResolved && (
+              <ErrorState error={actionError} />
+            )}
             {sessionId && proposals.isPending ? (
               <Loading label="Loading proposals" />
             ) : proposals.error ? (
@@ -269,7 +357,13 @@ export function AssistantPage() {
                     <strong>{proposal.title}</strong>
                     <span>{proposal.state}</span>
                   </div>
-                  <p className="proposal-body">{proposal.body}</p>
+                  <p
+                    className="proposal-body"
+                    tabIndex={0}
+                    aria-label="Issue proposal details"
+                  >
+                    {proposal.body}
+                  </p>
                   <p className="assistant-help">
                     Labels:{" "}
                     {proposal.labels.length
@@ -286,8 +380,13 @@ export function AssistantPage() {
                       View on GitHub <ArrowUpRight size={14} />
                     </a>
                   )}
-                  {(proposal.state === "UNKNOWN" ||
-                    proposal.state === "EXECUTING") && (
+                  {proposal.state === "EXECUTING" && (
+                    <p className="uncertain">
+                      Creation is in progress. The status will update
+                      automatically; do not submit it again.
+                    </p>
+                  )}
+                  {proposal.state === "UNKNOWN" && (
                     <p className="uncertain">
                       Creation could not be confirmed. Check GitHub before
                       taking further action; this proposal cannot be retried.
@@ -295,20 +394,57 @@ export function AssistantPage() {
                   )}
                   {proposal.state === "PENDING" && (
                     <div className="proposal-actions">
-                      <button
-                        className="button primary"
-                        disabled={!active || decide.isPending}
-                        onClick={() => decideProposal(proposal, "approve")}
-                      >
-                        Approve and create
-                      </button>
-                      <button
-                        className="button"
-                        disabled={decide.isPending}
-                        onClick={() => decideProposal(proposal, "reject")}
-                      >
-                        Reject
-                      </button>
+                      {confirmId === proposal.id ? (
+                        <div
+                          className="approval-confirm"
+                          role="group"
+                          aria-label={`Confirm creation of ${proposal.title}`}
+                        >
+                          <p>
+                            Create <strong>{proposal.title}</strong> in{" "}
+                            <strong>
+                              {repository?.fullName ?? "this repository"}
+                            </strong>{" "}
+                            on GitHub?
+                          </p>
+                          <div className="proposal-actions">
+                            <button
+                              className="button primary"
+                              disabled={!active || operationPending}
+                              autoFocus
+                              onClick={() =>
+                                decideProposal(proposal, "approve")
+                              }
+                            >
+                              Confirm creation
+                            </button>
+                            <button
+                              className="button"
+                              disabled={operationPending}
+                              onClick={() => setConfirmId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            className="button primary"
+                            disabled={!active || operationPending}
+                            onClick={() => setConfirmId(proposal.id)}
+                          >
+                            Approve and create
+                          </button>
+                          <button
+                            className="button"
+                            disabled={operationPending}
+                            onClick={() => decideProposal(proposal, "reject")}
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </article>

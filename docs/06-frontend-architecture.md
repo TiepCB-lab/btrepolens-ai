@@ -71,6 +71,8 @@ Trong mỗi feature, đặt API calls và kiểu response gần nơi sử dụng
 
 Dev server Vite bind `127.0.0.1`, dùng proxy cùng origin cho `/api` và `/actuator` tới `http://127.0.0.1:8080`, cấu hình đích proxy bằng `BACKEND_URL` khi backend đổi cổng. Client gọi đường dẫn tương đối `/api/v1/...`; không cần bật CORS backend cho luồng local qua proxy. Build tĩnh về sau cần được phục vụ cùng origin hoặc có reverse proxy; SPA hosting cần fallback về `index.html` cho deep link.
 
+Trong Assistant, frontend kiểm tra trạng thái phiên và cập nhật định kỳ tin nhắn, proposal và tool log của phiên được chọn khi tab hoạt động. Bản nháp được giữ riêng theo hội thoại trong lúc màn hình còn mở; đóng hoặc rời màn hình không lưu bản nháp. Nếu mất phản hồi sau khi gửi, người dùng cần kiểm tra lịch sử trước khi gửi lại. Tạo issue yêu cầu hai bước xác nhận trên giao diện; trạng thái `EXECUTING` được làm mới mà không tự gửi lại lệnh ghi, còn `UNKNOWN` cần đối chiếu thủ công với GitHub.
+
 Token GitHub, mật khẩu database và AI key chỉ ở backend; không đưa vào biến `VITE_*`, bundle, localStorage hoặc log trình duyệt. Coi nội dung issue/PR là dữ liệu không tin cậy: render như text, không dùng `dangerouslySetInnerHTML`; nếu bổ sung Markdown sau này phải xử lý an toàn trước khi render. Dùng HTML semantic, điều hướng bằng bàn phím, trạng thái focus và nhãn truy cập được. Remote deployment cần authentication và hardening bổ sung ở backend và tầng phục vụ frontend.
 
 ## Trình tự triển khai đề xuất
