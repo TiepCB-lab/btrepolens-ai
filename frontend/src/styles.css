@@ -404,6 +404,9 @@ svg {
   font-size: 12px;
   font-weight: 600;
 }
+.register-form .repository-url {
+  grid-column: 1 / -1;
+}
 .register-form input {
   height: 38px;
   width: 100%;

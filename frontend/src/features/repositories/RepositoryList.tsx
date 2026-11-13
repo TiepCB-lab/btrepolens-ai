@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { ArrowRight, BookOpen, GitBranch, Plus } from "lucide-react";
 import { repositoriesApi } from "./api";
+import { ApiError } from "../../shared/api/client";
 import { ErrorState, Loading } from "../../shared/components/States";
 import { formatDate } from "../../shared/format";
 
@@ -12,21 +13,44 @@ export function RepositoryList() {
     queryKey: ["repositories"],
     queryFn: repositoriesApi.list,
   });
-  const [owner, setOwner] = useState("");
-  const [name, setName] = useState("");
+  const [repository, setRepository] = useState("");
+  const [inputError, setInputError] = useState<Error | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const add = useMutation({
-    mutationFn: () => repositoriesApi.register(owner.trim(), name.trim()),
+    mutationFn: ({ owner, name }: { owner: string; name: string }) =>
+      repositoriesApi.register(owner, name),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["repositories"] });
-      setOwner("");
-      setName("");
+      setRepository("");
       setFormOpen(false);
     },
   });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    add.mutate();
+    const match = repository
+      .trim()
+      .match(
+        /^(?:https:\/\/github\.com\/)?([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+)\/?$/i,
+      );
+    const owner = match?.[1];
+    const name = match?.[2].replace(/\.git$/i, "");
+    if (
+      !owner ||
+      !name ||
+      owner.length > 100 ||
+      name.length > 100 ||
+      name === "." ||
+      name === ".."
+    ) {
+      setInputError(
+        new Error(
+          "Enter a GitHub repository URL or owner/name, such as https://github.com/octocat/Hello-World.",
+        ),
+      );
+      return;
+    }
+    setInputError(null);
+    add.mutate({ owner, name });
   }
 
   return (
@@ -54,30 +78,26 @@ export function RepositoryList() {
           <div>
             <h2 id="add-heading">Connect a repository</h2>
             <p>
-              Enter the owner and name as they appear on GitHub. Access is
-              verified before saving.
+              Paste a GitHub repository URL or enter owner/name. Access is
+              verified before saving. Private repositories require a GitHub
+              token.
             </p>
           </div>
           <form onSubmit={submit} className="register-form">
-            <label>
-              Owner
+            <label className="repository-url">
+              GitHub repository URL
               <input
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
-                placeholder="e.g. octocat"
+                value={repository}
+                onChange={(e) => {
+                  setRepository(e.target.value);
+                  setInputError(null);
+                  add.reset();
+                }}
+                placeholder="https://github.com/owner/repository"
                 required
-                maxLength={100}
+                maxLength={240}
+                aria-invalid={inputError ? true : undefined}
                 autoFocus
-              />
-            </label>
-            <label>
-              Repository name
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Hello-World"
-                required
-                maxLength={100}
               />
             </label>
             <button className="button primary" disabled={add.isPending}>
@@ -90,7 +110,19 @@ export function RepositoryList() {
             >
               Cancel
             </button>
-            {add.error && <ErrorState error={add.error} />}
+            {inputError && <ErrorState error={inputError} />}
+            {add.error && (
+              <ErrorState
+                error={
+                  add.error instanceof ApiError &&
+                  add.error.code === "GITHUB_NOT_FOUND"
+                    ? new Error(
+                        "Repository not found or inaccessible. Check the URL; private repositories require a GitHub token with access.",
+                      )
+                    : add.error
+                }
+              />
+            )}
           </form>
         </section>
       )}
