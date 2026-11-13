@@ -95,6 +95,6 @@ public class ChatService {
             return db.queryForObject("SELECT * FROM chat_message WHERE id=?",(r,n)->new ChatMessage(r.getLong("id"),r.getString("role"),r.getString("content"),r.getTimestamp("created_at").toInstant()),messageId);
         } catch (AppException e) { throw e; }
         catch (java.sql.SQLException e) { throw new AppException(HttpStatus.SERVICE_UNAVAILABLE,"SESSION_LOCK_FAILED","Could not lock the conversation. Try again."); }
-        catch (RuntimeException e) { throw new AppException(HttpStatus.BAD_GATEWAY,"AI_REQUEST_FAILED","The AI request failed. Check provider configuration and try again."); }
+        catch (RuntimeException e) { throw AiRequestErrors.translate(e); }
     }
 }

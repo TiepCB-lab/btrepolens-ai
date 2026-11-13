@@ -46,3 +46,5 @@ curl http://localhost:8080/api/v1/repositories/1/pull-requests/1
 Only the active repository can be used for new assistant work or approval. AI is optional and returns 503 `AI_NOT_CONFIGURED` when disabled. A proposal must be `PENDING` to approve; concurrent approval is rejected. `UNKNOWN` or a remaining `EXECUTING` state needs manual GitHub reconciliation and cannot be retried. A GitHub timeout does not prove that the issue was not created.
 
 A chat turn returns 409 `SESSION_SUPERSEDED` if its database lock is absent or a newer turn has claimed the session when a guarded operation is checked. The original user message may already be present; review the conversation before retrying.
+
+Provider failures are sanitized. HTTP 429 `AI_LIMIT_REACHED` indicates a provider rate or usage limit; check the provider's quota before retrying. HTTP 502 may carry `AI_AUTH_FAILED`, `AI_MODEL_UNAVAILABLE`, `AI_PROVIDER_UNAVAILABLE`, `AI_CONNECTION_FAILED`, or the generic `AI_REQUEST_FAILED`. These errors can occur after the user message has been saved; check conversation history before resending.

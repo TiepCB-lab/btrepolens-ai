@@ -295,6 +295,7 @@ export function AssistantPage() {
                   {send.error instanceof ApiError &&
                     (send.error.status === 0 ||
                       send.error.status >= 500 ||
+                      send.error.code === "AI_LIMIT_REACHED" ||
                       send.error.code === "INVALID_RESPONSE") && (
                       <p className="assistant-help">
                         Your message may already be saved. Check the

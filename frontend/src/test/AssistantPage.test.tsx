@@ -88,52 +88,66 @@ it("refreshes a short turn and an executing proposal even when busy is never obs
   expect(api.mock.calls.some(([url]) => url.endsWith("/approve"))).toBe(false);
 }, 12000);
 
-it("warns that a message may have been saved when the response is lost", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string, options?: RequestInit) => {
-      if (options?.method === "POST") throw new TypeError("connection lost");
-      const data = url.endsWith("/repositories")
-        ? [{ id: 1, active: true }]
-        : url.endsWith("/chat/sessions")
-          ? [{ id: 10, repositoryId: 1, title: "Test", busy: false }]
-          : url.endsWith("/chat/sessions/10")
-            ? { id: 10, repositoryId: 1, title: "Test", busy: false }
-            : [];
-      return new Response(JSON.stringify({ success: true, data }));
-    }),
-  );
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/repositories/1/assistant"]}>
-        <Routes>
-          <Route
-            path="/repositories/:id/assistant"
-            element={<AssistantPage />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
-  await screen.findByRole("option", { name: /Test/ });
-  fireEvent.change(screen.getByLabelText("Conversation"), {
-    target: { value: "10" },
-  });
-  await waitFor(() =>
-    expect(screen.getByLabelText("Your message")).toBeEnabled(),
-  );
-  fireEvent.change(screen.getByLabelText("Your message"), {
-    target: { value: "Summarize" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-  expect(
-    await screen.findByText(/Your message may already be saved/),
-  ).toBeInTheDocument();
-  expect(screen.getByLabelText("Your message")).toHaveValue("Summarize");
-});
+it.each(["network failure", "provider limit"])(
+  "keeps the draft after %s",
+  async (failure) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, options?: RequestInit) => {
+        if (options?.method === "POST") {
+          if (failure === "network failure")
+            throw new TypeError("connection lost");
+          return new Response(
+            JSON.stringify({
+              success: false,
+              errorCode: "AI_LIMIT_REACHED",
+              message: "Check your provider quota.",
+            }),
+            { status: 429 },
+          );
+        }
+        const data = url.endsWith("/repositories")
+          ? [{ id: 1, active: true }]
+          : url.endsWith("/chat/sessions")
+            ? [{ id: 10, repositoryId: 1, title: "Test", busy: false }]
+            : url.endsWith("/chat/sessions/10")
+              ? { id: 10, repositoryId: 1, title: "Test", busy: false }
+              : [];
+        return new Response(JSON.stringify({ success: true, data }));
+      }),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/repositories/1/assistant"]}>
+          <Routes>
+            <Route
+              path="/repositories/:id/assistant"
+              element={<AssistantPage />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("option", { name: /Test/ });
+    fireEvent.change(screen.getByLabelText("Conversation"), {
+      target: { value: "10" },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Your message")).toBeEnabled(),
+    );
+    fireEvent.change(screen.getByLabelText("Your message"), {
+      target: { value: "Summarize" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(
+      await screen.findByText(/Your message may already be saved/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Your message")).toHaveValue("Summarize");
+  },
+);
 
 it("keeps the draft and shows recovery guidance when a turn is interrupted", async () => {
   vi.stubGlobal(
