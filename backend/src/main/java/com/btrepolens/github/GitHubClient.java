@@ -27,13 +27,16 @@ public class GitHubClient {
     }
     private <T> T get(String path, Map<String, ?> params, ParameterizedTypeReference<T> type) {
         try {
-            return client.get().uri(b -> { var u = b.path(path); params.forEach(u::queryParam); return u.build(); }).retrieve()
+            T result = client.get().uri(b -> { var u = b.path(path); params.forEach(u::queryParam); return u.build(); }).retrieve()
                 .onStatus(s -> s.is3xxRedirection(), (request, response) -> { throw new AppException(HttpStatus.BAD_GATEWAY, "GITHUB_REDIRECT", "GitHub resource moved; verify its identity before registering again"); })
                 .body(type);
+            if (result == null) throw new AppException(HttpStatus.BAD_GATEWAY, "GITHUB_ERROR", "GitHub returned an invalid response");
+            return result;
         } catch (RestClientResponseException e) {
             int status = e.getStatusCode().value();
-            boolean limited = status == 429 || (status == 403 && e.getResponseHeaders() != null &&
-                ("0".equals(e.getResponseHeaders().getFirst("X-RateLimit-Remaining")) || e.getResponseHeaders().getFirst("Retry-After") != null));
+            HttpHeaders headers = e.getResponseHeaders();
+            boolean limited = status == 429 || (status == 403 && headers != null &&
+                ("0".equals(headers.getFirst("X-RateLimit-Remaining")) || headers.getFirst("Retry-After") != null));
             if (limited) throw new AppException(HttpStatus.TOO_MANY_REQUESTS, "GITHUB_RATE_LIMIT", "GitHub rate limit exceeded; retry later");
             if (status == 401) throw new AppException(HttpStatus.BAD_GATEWAY, "GITHUB_UNAUTHORIZED", "GitHub credentials are invalid");
             if (status == 403) throw new AppException(HttpStatus.FORBIDDEN, "GITHUB_FORBIDDEN", "GitHub access is forbidden");
