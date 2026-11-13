@@ -39,4 +39,6 @@ class GitHubClientTest {
     @Test void translatesAuthenticationFailure(){status=401;response="{}";assertEquals("GITHUB_UNAUTHORIZED",assertThrows(AppException.class,()->client.getRepository("a","b")).code());}
     @Test void translatesNotFound(){status=404;response="{}";assertEquals("GITHUB_NOT_FOUND",assertThrows(AppException.class,()->client.getRepository("a","b")).code());}
     @Test void translatesRateLimit(){status=403;response="{}";rateLimited=true;assertEquals("GITHUB_RATE_LIMIT",assertThrows(AppException.class,()->client.getRepository("a","b")).code());}
+    @Test void rejectsEmptyResponse(){status=200;response="";assertEquals("GITHUB_ERROR",assertThrows(AppException.class,()->client.getIssue("a","b",1)).code());}
+    @Test void rejectsNullListResponse(){status=200;response="null";assertEquals("GITHUB_ERROR",assertThrows(AppException.class,()->client.listPullRequests("a","b","open",10)).code());}
 }
