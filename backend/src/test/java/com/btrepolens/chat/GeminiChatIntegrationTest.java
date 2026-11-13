@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -26,12 +27,20 @@ import static org.mockito.Mockito.*;
 @EnabledIfEnvironmentVariable(named = "MVP_TEST_DB_URL", matches = ".+")
 class GeminiChatIntegrationTest {
     private static final List<String> requests = new CopyOnWriteArrayList<>();
+    private static final AtomicBoolean rateLimited = new AtomicBoolean();
     private static HttpServer server;
 
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v1beta/openai/chat/completions", exchange -> {
             requests.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            if (rateLimited.get()) {
+                byte[] bytes = "{\"error\":{\"message\":\"private provider details\",\"type\":\"rate_limit_error\",\"code\":\"rate_limit_exceeded\"}}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(429, bytes.length);
+                try (var output = exchange.getResponseBody()) { output.write(bytes); }
+                return;
+            }
             String response = requests.size() == 1 ? """
                 {"id":"first","object":"chat.completion","created":1,"model":"gemini-3.5-flash-lite",
                  "choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,
@@ -52,6 +61,7 @@ class GeminiChatIntegrationTest {
         registry.add("spring.datasource.password", () -> System.getenv().getOrDefault("MVP_TEST_DB_PASSWORD", ""));
         registry.add("spring.ai.openai.base-url", () -> "http://127.0.0.1:" + server.getAddress().getPort() + "/v1beta/openai");
         registry.add("spring.ai.openai.api-key", () -> "test-key");
+        registry.add("spring.ai.openai.max-retries", () -> "0");
     }
 
     @AfterAll static void stopServer() { if (server != null) server.stop(0); }
@@ -73,6 +83,11 @@ class GeminiChatIntegrationTest {
             assertTrue(requests.get(0).contains("gemini-3.5-flash-lite"));
             assertTrue(requests.get(1).contains("test-signature"));
             verify(github).listIssues("test", name, "open", 20);
+            rateLimited.set(true);
+            var failure = assertThrows(com.btrepolens.common.AppException.class, () -> chats.send(session, "Try again"));
+            assertEquals("AI_LIMIT_REACHED", failure.code());
+            assertEquals(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, failure.status());
+            assertFalse(failure.getMessage().contains("private provider details"));
         } finally {
             db.update("DELETE FROM tool_execution_log WHERE session_id=?", session);
             db.update("DELETE FROM chat_message WHERE session_id=?", session);
