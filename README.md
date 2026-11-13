@@ -58,14 +58,22 @@ docker compose up -d
 docker compose ps
 ```
 
-PostgreSQL mặc định lắng nghe tại `127.0.0.1:55432`; dữ liệu được lưu trong Docker named volume. Không commit `.env`. Nếu thay đổi mật khẩu sau khi volume đã được khởi tạo, cần cập nhật credential trong PostgreSQL tương ứng; sửa `.env` không tự đổi mật khẩu trong volume cũ.
+PostgreSQL mặc định lắng nghe tại `127.0.0.1:15432`; dữ liệu được lưu trong Docker named volume. Không commit `.env`. Nếu thay đổi mật khẩu sau khi volume đã được khởi tạo, cần cập nhật credential trong PostgreSQL tương ứng; sửa `.env` không tự đổi mật khẩu trong volume cũ. Nếu đang dùng `.env` cũ, cập nhật `DB_URL` sang cổng `15432`.
 
 ### 3. Chạy backend
 
-Docker Compose đọc `.env`, nhưng Spring Boot **không tự nạp** file này. Khai báo các biến trong cùng terminal, dùng giá trị khớp với `.env`:
+Docker Compose đọc `.env`, nhưng Spring Boot **không tự nạp** file này. Trên Windows, chạy script từ thư mục gốc để nạp cấu hình và khởi động backend:
 
 ```powershell
-$env:DB_URL = 'jdbc:postgresql://localhost:55432/btrepolens'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-backend.ps1
+# Nếu cổng 8080 đã được sử dụng:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-backend.ps1 -Port 8081
+```
+
+Script chỉ nạp các biến backend từ `.env` vào tiến trình hiện tại và không in credential. Không chạy đồng thời cả hai lệnh trên. Bạn cũng có thể tự khai báo biến trong cùng terminal, dùng giá trị khớp với `.env`:
+
+```powershell
+$env:DB_URL = 'jdbc:postgresql://localhost:15432/btrepolens'
 $env:DB_USERNAME = 'btrepolens'
 $env:DB_PASSWORD = '<POSTGRES_PASSWORD trong .env>'
 $env:GITHUB_TOKEN = '<token GitHub, hoặc để trống cho public repository>'
@@ -83,6 +91,20 @@ $env:AI_MODEL = '<model hỗ trợ tool calling>'
 ```
 
 Lựa chọn model và các lần gọi API có thể phát sinh chi phí. Tin nhắn và dữ liệu GitHub mà agent đọc được gửi tới nhà cung cấp model; chỉ dùng repository và dữ liệu bạn được phép chia sẻ. Trên macOS/Linux, dùng `./mvnw` và thiết lập biến môi trường theo shell đang sử dụng.
+
+#### Dùng Gemini thay cho OpenAI
+
+Tạo API key tại [Google AI Studio](https://aistudio.google.com/app/apikey), sau đó thêm các dòng sau vào `.env` ở thư mục gốc:
+
+```dotenv
+SPRING_PROFILES_ACTIVE=gemini
+GEMINI_API_KEY=<Gemini API key>
+GEMINI_MODEL=gemini-3.5-flash-lite
+```
+
+Khởi động lại backend bằng `scripts/run-backend.ps1` như hướng dẫn ở trên. Profile `gemini` dùng Gemini qua API tương thích OpenAI của Google; các biến OpenAI cũ được giữ nguyên. Muốn quay lại OpenAI, bỏ `gemini` khỏi `SPRING_PROFILES_ACTIVE` rồi khởi động lại. Khi chạy backend không qua script, xuất ba biến môi trường trên trong terminal trước khi chạy Maven.
+
+Hạn mức miễn phí tùy tài khoản và model. Khi dùng Gemini, nội dung hội thoại cùng dữ liệu GitHub mà agent đọc được sẽ gửi đến Google; [chính sách của Google cho free tier](https://ai.google.dev/gemini-api/docs/pricing) cho biết nội dung có thể được dùng để cải thiện sản phẩm. Không đưa key vào chat, source code hay Git.
 
 ### 4. Kiểm tra
 
