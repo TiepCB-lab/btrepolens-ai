@@ -1,0 +1,10 @@
+spring:
+  ai:
+    model:
+      chat: openai
+    openai:
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      api-key: ${GEMINI_API_KEY}
+      chat:
+        options:
+          model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
