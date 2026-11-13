@@ -135,6 +135,62 @@ it("warns that a message may have been saved when the response is lost", async (
   expect(screen.getByLabelText("Your message")).toHaveValue("Summarize");
 });
 
+it("keeps the draft and shows recovery guidance when a turn is interrupted", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, options?: RequestInit) => {
+      if (options?.method === "POST")
+        return new Response(
+          JSON.stringify({
+            success: false,
+            errorCode: "SESSION_SUPERSEDED",
+            message:
+              "This response was interrupted. Your message may already be saved; check the conversation before sending it again.",
+          }),
+          { status: 409 },
+        );
+      const data = url.endsWith("/repositories")
+        ? [{ id: 1, active: true }]
+        : url.endsWith("/chat/sessions")
+          ? [{ id: 10, repositoryId: 1, title: "Test", busy: false }]
+          : url.endsWith("/chat/sessions/10")
+            ? { id: 10, repositoryId: 1, title: "Test", busy: false }
+            : [];
+      return new Response(JSON.stringify({ success: true, data }));
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/repositories/1/assistant"]}>
+        <Routes>
+          <Route
+            path="/repositories/:id/assistant"
+            element={<AssistantPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("option", { name: /Test/ });
+  fireEvent.change(screen.getByLabelText("Conversation"), {
+    target: { value: "10" },
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText("Your message")).toBeEnabled(),
+  );
+  fireEvent.change(screen.getByLabelText("Your message"), {
+    target: { value: "Summarize" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  expect(
+    await screen.findByText(/check the conversation before sending it again/i),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Your message")).toHaveValue("Summarize");
+});
+
 it("disables sending while a turn is active in another window and refreshes afterward", async () => {
   const api = vi.fn(async (url: string) => {
     const data = url.endsWith("/repositories")
