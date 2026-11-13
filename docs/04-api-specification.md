@@ -44,3 +44,5 @@ curl http://localhost:8080/api/v1/repositories/1/pull-requests/1
 | POST | `/api/v1/proposals/{id}/reject` | Reject a pending proposal using `{}` |
 
 Only the active repository can be used for new assistant work or approval. AI is optional and returns 503 `AI_NOT_CONFIGURED` when disabled. A proposal must be `PENDING` to approve; concurrent approval is rejected. `UNKNOWN` or a remaining `EXECUTING` state needs manual GitHub reconciliation and cannot be retried. A GitHub timeout does not prove that the issue was not created.
+
+A chat turn returns 409 `SESSION_SUPERSEDED` if its database lock is absent or a newer turn has claimed the session when a guarded operation is checked. The original user message may already be present; review the conversation before retrying.

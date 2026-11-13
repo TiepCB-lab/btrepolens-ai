@@ -37,7 +37,7 @@ class ProposalIntegrationTest {
         String name="integration-"+java.util.UUID.randomUUID();
         repo=db.queryForObject("INSERT INTO tracked_repository(owner,name,full_name,github_url,active,created_at,updated_at) VALUES ('test',?,?,?,true,now(),now()) RETURNING id",Long.class,name,"test/"+name,"https://github.com/test/"+name);
         session=db.queryForObject("INSERT INTO chat_session(repository_id,title) VALUES (?,?) RETURNING id",Long.class,repo,"test");
-        proposal=proposals.create(session,repo,"Title","Acceptance criteria: test",List.of()).id();
+        proposal=db.queryForObject("INSERT INTO issue_proposal(session_id,repository_id,title,body,labels) VALUES (?,?,?,?,'') RETURNING id",Long.class,session,repo,"Title","Acceptance criteria: test");
     }
     @AfterEach void clean(){db.update("DELETE FROM issue_proposal WHERE session_id=?",session);db.update("DELETE FROM chat_session WHERE id=?",session);db.update("DELETE FROM tracked_repository WHERE id=?",repo);}
     @Test void concurrentApprovalsSendOnlyOneWrite() throws Exception {

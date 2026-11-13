@@ -1,6 +1,7 @@
 package com.btrepolens.approval;
 
 import com.btrepolens.common.AppException;
+import com.btrepolens.chat.ChatTurnFence;
 import com.btrepolens.github.GitHubClient;
 import java.time.Instant;
 import java.util.Arrays;
@@ -31,13 +32,18 @@ public class ProposalService {
             .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND,"PROPOSAL_NOT_FOUND","Proposal not found"));
     }
     public List<Proposal> list(long sessionId) { return db.query("SELECT * FROM issue_proposal WHERE session_id=? ORDER BY id DESC", ProposalService::map, sessionId); }
-    public Proposal create(long sessionId, long repositoryId, String title, String body, List<String> labels) {
+    public Proposal createForTurn(long sessionId, long repositoryId, long generation, int pid, String title, String body, List<String> labels) {
         if (title == null || title.isBlank() || title.length() > 256 || body == null || body.isBlank() || body.length() > 20000 || labels == null || labels.size() > 10 ||
             labels.stream().anyMatch(s -> s == null || s.isBlank() || s.length() > 100 || s.contains("\n") || s.contains("\r")))
             throw new AppException(HttpStatus.BAD_REQUEST,"INVALID_PROPOSAL","Proposal content is invalid");
-        Long id = db.queryForObject("INSERT INTO issue_proposal(session_id,repository_id,title,body,labels) VALUES (?,?,?,?,?) RETURNING id", Long.class,
-            sessionId, repositoryId, title.trim(), body, String.join("\n", labels));
-        return get(id);
+        var ids = db.query("""
+            INSERT INTO issue_proposal(session_id,repository_id,title,body,labels)
+            SELECT s.id,s.repository_id,?,?,? FROM chat_session s
+            WHERE s.id=? AND s.repository_id=? AND s.turn_generation=? AND %s
+            FOR UPDATE OF s RETURNING id
+            """.formatted(ChatTurnFence.HELD_LOCK), (r,n)->r.getLong(1), title.trim(), body, String.join("\n", labels), sessionId, repositoryId, generation, pid);
+        if (ids.isEmpty()) throw ChatTurnFence.superseded();
+        return get(ids.getFirst());
     }
     public Proposal reject(long id) {
         int updated=db.update("UPDATE issue_proposal SET state='REJECTED',updated_at=now() WHERE id=? AND state='PENDING'",id);
