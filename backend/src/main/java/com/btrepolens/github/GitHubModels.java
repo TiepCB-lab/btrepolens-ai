@@ -14,6 +14,9 @@ public final class GitHubModels {
         List<Label> labels, @JsonProperty("pull_request") Object pullRequest) {}
     public record PullRequest(long number, String title, String state, String body, @JsonProperty("html_url") String htmlUrl,
         @JsonProperty("created_at") Instant createdAt, @JsonProperty("updated_at") Instant updatedAt) {}
+    public record PullRequestFile(String filename, @JsonProperty("previous_filename") String previousFilename,
+        String status, int additions, int deletions, int changes) {}
+    public record PullRequestFiles(List<PullRequestFile> files, boolean incomplete) {}
     public record SearchCount(@JsonProperty("total_count") long totalCount, @JsonProperty("incomplete_results") boolean incompleteResults) {}
     public record IssueView(long number, String title, String state, String body, String url, Instant createdAt, Instant updatedAt, List<String> labels) {
         public static IssueView from(Issue i) { return new IssueView(i.number(), i.title(), i.state(), i.body(), i.htmlUrl(), i.createdAt(), i.updatedAt(), i.labels() == null ? List.of() : i.labels().stream().map(Label::name).toList()); }

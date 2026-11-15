@@ -11,6 +11,18 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class RepositoryToolsTest {
+    @Test void pullRequestFilesAreRestrictedToActiveRepository() {
+        var chats = mock(ChatService.class);
+        var github = mock(GitHubClient.class);
+        var db = mock(JdbcTemplate.class);
+        var tools = new RepositoryTools(1, 42, 3, 99, "trusted-owner", "trusted-repo", chats, github, mock(ProposalService.class), db);
+        tools.getPullRequestFiles(17);
+        verify(chats, times(2)).requireCurrentTurn(1, 3, 99);
+        verify(chats).requireActive(42);
+        verify(github).getPullRequestFiles("trusted-owner", "trusted-repo", 17);
+        assertThrows(IllegalArgumentException.class, () -> tools.getPullRequestFiles(0));
+        verifyNoMoreInteractions(github);
+    }
     @Test void issueLookupUsesOnlyTheServerBoundRepository() {
         var chats = mock(ChatService.class);
         var github = mock(GitHubClient.class);
@@ -27,6 +39,7 @@ class RepositoryToolsTest {
         doThrow(new AppException(HttpStatus.CONFLICT, "REPOSITORY_NOT_ACTIVE", "inactive")).when(chats).requireActive(42);
         var tools = new RepositoryTools(1, 42, 3, 99, "owner", "repo", chats, github, mock(ProposalService.class), db);
         assertThrows(AppException.class, tools::listIssues);
+        assertThrows(AppException.class, () -> tools.getPullRequestFiles(17));
         verifyNoInteractions(github);
         verify(db).update("INSERT INTO tool_execution_log(session_id,tool_name,success) VALUES (?,?,?)", 1L, "listIssues", false);
     }
