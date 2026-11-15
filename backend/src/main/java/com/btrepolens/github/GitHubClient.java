@@ -53,6 +53,7 @@ public class GitHubClient {
     private static final ParameterizedTypeReference<List<Issue>> ISSUES = new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<PullRequest> PR = new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<List<PullRequest>> PRS = new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<List<PullRequestFile>> PR_FILES = new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<SearchCount> COUNT = new ParameterizedTypeReference<>() {};
     private String repo(String owner, String name) { return "/repos/" + owner + "/" + name; }
     public Repository getRepository(String owner, String name) { return get(repo(owner,name), Map.of(), REPO); }
@@ -75,6 +76,11 @@ public class GitHubClient {
         return list.stream().map(PullRequestView::from).toList();
     }
     public PullRequestView getPullRequest(String owner, String name, long number) { return PullRequestView.from(get(repo(owner,name) + "/pulls/" + number, Map.of(), PR)); }
+    public PullRequestFiles getPullRequestFiles(String owner, String name, long number) {
+        int limit = 30;
+        List<PullRequestFile> files = get(repo(owner, name) + "/pulls/" + number + "/files", Map.of("per_page", limit + 1, "page", 1), PR_FILES);
+        return new PullRequestFiles(List.copyOf(files.subList(0, Math.min(files.size(), limit))), files.size() > limit);
+    }
     public Count count(String owner, String name, String type) {
         SearchCount c = get("/search/issues", Map.of("q", "repo:" + owner + "/" + name + " is:open is:" + type, "per_page", 1), COUNT);
         return new Count(c.totalCount(), c.incompleteResults());

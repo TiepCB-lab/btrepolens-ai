@@ -10,6 +10,7 @@ Trợ lý quản lý công việc GitHub hướng tới khả năng phân tích 
 - Chọn một repository active và lưu lựa chọn trong PostgreSQL.
 - Xem metadata, số issue và pull request đang mở, cùng các mục cập nhật gần đây.
 - Xem danh sách và chi tiết issue, pull request theo repository đã đăng ký.
+- Assistant có thể xem tối đa 30 file thay đổi của một pull request cùng thống kê thêm/xóa; nếu còn file khác, kết quả được đánh dấu chưa đầy đủ. Khả năng này không đọc diff hay thay thế việc review mã nguồn.
 - Sử dụng giao diện web để đăng ký, chọn repository và duyệt dữ liệu GitHub.
 - Lưu hội thoại và nhật ký tên/kết quả công cụ; AI đề xuất issue để con người duyệt trước khi ghi.
 - Cung cấp REST API có validation, xử lý lỗi tập trung và health check.

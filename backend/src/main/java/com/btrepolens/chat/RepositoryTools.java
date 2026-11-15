@@ -34,6 +34,8 @@ public class RepositoryTools {
     public Object listPullRequests(){return run("listPullRequests",()->github.listPullRequests(owner,name,"open",20).stream().map(com.btrepolens.github.GitHubModels.PullRequestSummary::from).toList());}
     @Tool(description="Get one pull request from the selected repository by its positive number.")
     public Object getPullRequestDetails(long number){return run("getPullRequestDetails",()->{if(number<1) throw new IllegalArgumentException("Invalid number");return github.getPullRequest(owner,name,number);});}
+    @Tool(description="List up to 30 changed files and change counts for a pull request in the selected repository. If incomplete is true, more files exist. File contents and patches are not included.")
+    public Object getPullRequestFiles(long number){return run("getPullRequestFiles",()->{if(number<1) throw new IllegalArgumentException("Invalid number");return github.getPullRequestFiles(owner,name,number);});}
     @Tool(description="Save a draft issue for human review. This does not create a GitHub issue. Include acceptance criteria in the body and suggest only evidence-backed labels.")
     public Object proposeIssueCreation(String title,String body,List<String> labels){return run("proposeIssueCreation",()->proposals.createForTurn(sessionId,repositoryId,generation,pid,title,body,labels));}
 }

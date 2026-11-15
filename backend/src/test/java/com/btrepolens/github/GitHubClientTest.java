@@ -14,9 +14,12 @@ class GitHubClientTest {
     private int status;
     private String response;
     private boolean rateLimited;
+    private String requestPath, requestQuery;
     @BeforeEach void start() throws Exception {
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/", exchange -> {
+            requestPath=exchange.getRequestURI().getPath();
+            requestQuery=exchange.getRequestURI().getRawQuery();
             if(rateLimited) exchange.getResponseHeaders().add("X-RateLimit-Remaining","0");
             exchange.getResponseHeaders().add("Content-Type","application/json");
             byte[] bytes=response.getBytes(StandardCharsets.UTF_8);
@@ -41,4 +44,17 @@ class GitHubClientTest {
     @Test void translatesRateLimit(){status=403;response="{}";rateLimited=true;assertEquals("GITHUB_RATE_LIMIT",assertThrows(AppException.class,()->client.getRepository("a","b")).code());}
     @Test void rejectsEmptyResponse(){status=200;response="";assertEquals("GITHUB_ERROR",assertThrows(AppException.class,()->client.getIssue("a","b",1)).code());}
     @Test void rejectsNullListResponse(){status=200;response="null";assertEquals("GITHUB_ERROR",assertThrows(AppException.class,()->client.listPullRequests("a","b","open",10)).code());}
+    @Test void returnsBoundedPullRequestFileMetadata(){
+        status=200;
+        response="["+java.util.stream.IntStream.range(0,31).mapToObj(i -> "{\"filename\":\"file"+i+"\",\"status\":\"modified\",\"additions\":2,\"deletions\":1,\"changes\":3,\"patch\":\"private content\"}").collect(java.util.stream.Collectors.joining(","))+"]";
+        var result=client.getPullRequestFiles("owner","repo",12);
+        assertEquals("/repos/owner/repo/pulls/12/files",requestPath);
+        assertTrue(requestQuery.contains("per_page=31"));
+        assertEquals(30,result.files().size());
+        assertTrue(result.incomplete());
+        assertEquals("file0",result.files().getFirst().filename());
+        assertEquals(2,result.files().getFirst().additions());
+        assertFalse(result.toString().contains("private content"));
+    }
+    @Test void reportsCompletePullRequestFileList(){status=200;response="[]";assertFalse(client.getPullRequestFiles("owner","repo",1).incomplete());}
 }
