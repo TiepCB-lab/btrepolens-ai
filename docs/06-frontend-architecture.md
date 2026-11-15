@@ -53,6 +53,8 @@ frontend/
 
 Trong mỗi feature, đặt API calls và kiểu response gần nơi sử dụng; component trình bày không gọi GitHub trực tiếp. Không tạo sẵn package `chat`, `agent`, `approval` hoặc abstraction rỗng. Khi các chức năng tương ứng được triển khai, bổ sung feature riêng theo cùng quy ước.
 
+Hiện tại `features/repositories` chứa các màn hình repository, issue và pull request; `features/assistant` chứa giao diện hội thoại và phê duyệt. Assistant sử dụng tool phân tích metadata file PR qua backend, không truy cập GitHub trực tiếp và chưa hiển thị hoặc phân tích diff.
+
 ## Điều hướng và dữ liệu
 
 | Đường dẫn dự kiến | Chức năng | API backend |

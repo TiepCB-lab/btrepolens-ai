@@ -4,6 +4,8 @@ Trợ lý quản lý công việc GitHub hướng tới khả năng phân tích 
 
 > **Trạng thái:** MVP local hỗ trợ quản lý repository, chat với AI, truy xuất GitHub và đề xuất tạo issue. Việc tạo issue chỉ được thực hiện sau khi người dùng xem và phê duyệt.
 
+Tiến độ, kết quả kiểm thử và các giới hạn hiện tại được theo dõi tại [Trạng thái dự án](docs/07-project-status.md).
+
 ## Khả năng hiện tại
 
 - Đăng ký repository sau khi xác minh quyền truy cập qua GitHub; ngăn đăng ký trùng.
@@ -24,7 +26,7 @@ Overview dùng số liệu do GitHub Search báo cáo; kết quả có thể ch�
 | Backend | Java 25, Spring Boot 4.1.2, Spring Data JPA | Đã triển khai |
 | Database | PostgreSQL 17, Flyway | Đã cấu hình |
 | Tích hợp | GitHub REST API, Spring `RestClient` | Đọc; tạo issue sau phê duyệt |
-| AI | Spring AI 2.0.1, OpenAI | Cấu hình tùy chọn |
+| AI | Spring AI 2.0.1, OpenAI hoặc Gemini qua API tương thích | Cấu hình tùy chọn |
 | Frontend | React, TypeScript, Vite, React Router, TanStack Query | Đã triển khai giao diện cơ bản |
 
 ## Cấu trúc repository
