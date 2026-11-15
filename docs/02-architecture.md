@@ -17,4 +17,6 @@ Registration validates input, checks duplicates, verifies access against GitHub,
 
 The GitHub client uses a configured base URL, no automatic redirects, timeouts, bounded lists and sanitized errors. Overview counts come from GitHub Search rather than the mixed issue/PR repository counter. Search's incomplete flag is returned. The assistant receives the repository scope from a persisted session, checks that repository remains active, and treats GitHub text as untrusted. Model tools can read data and save proposals but cannot create GitHub issues. Explicit approval atomically claims a pending proposal before a single external write attempt. A crash or uncertain result remains `EXECUTING` or `UNKNOWN` and requires manual GitHub reconciliation; it is never automatically retried.
 
+For pull request analysis, the assistant can request filenames, status and addition/deletion counts for up to 30 changed files. The backend flags truncated results and does not return file patches through this tool. Tool calls share the existing per-turn limit and active-repository checks; the model must not infer code behavior from filenames alone.
+
 The frontend is a React + TypeScript SPA using Vite, React Router and TanStack Query. Its feature boundaries, local API proxy and security decisions are recorded in [Frontend architecture](06-frontend-architecture.md).

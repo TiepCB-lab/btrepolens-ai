@@ -1,4 +1,4 @@
-# Phase 1 API
+# API specification
 
 Base URL: `http://localhost:8080`. Responses use `{ "success": true, "data": ..., "message": "...", "errorCode": null, "timestamp": "..." }`. Errors use the same envelope with `success: false`, `data: null`, a sanitized message and error code. Statuses include 400 validation, 404 missing tracked or GitHub resource, 409 duplicate/conflict, 403 GitHub forbidden, 429 rate limit, 502 upstream failure and 504 network/timeout.
 
@@ -44,6 +44,8 @@ curl http://localhost:8080/api/v1/repositories/1/pull-requests/1
 | POST | `/api/v1/proposals/{id}/reject` | Reject a pending proposal using `{}` |
 
 Only the active repository can be used for new assistant work or approval. AI is optional and returns 503 `AI_NOT_CONFIGURED` when disabled. A proposal must be `PENDING` to approve; concurrent approval is rejected. `UNKNOWN` or a remaining `EXECUTING` state needs manual GitHub reconciliation and cannot be retried. A GitHub timeout does not prove that the issue was not created.
+
+The assistant's `getPullRequestFiles` tool reads up to 30 changed-file records for a positive pull request number within the active repository. It returns file names, change status and line counts; `incomplete: true` means additional files exist. It does not include patches or file contents. This is an internal assistant tool, not a separate public REST endpoint. The assistant can also read repository metadata, issues and pull requests and create a proposal for human review.
 
 A chat turn returns 409 `SESSION_SUPERSEDED` if its database lock is absent or a newer turn has claimed the session when a guarded operation is checked. The original user message may already be present; review the conversation before retrying.
 
